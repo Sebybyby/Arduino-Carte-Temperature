@@ -47,12 +47,15 @@ class BleWorker(QtCore.QThread):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._loop = None
+        self._tache = None
         self._stop_event = None
 
     # --- Exécuté dans le thread ---------------------------------------------
     def run(self):
         try:
             asyncio.run(self._session_ble())
+        except asyncio.CancelledError:  # arrêt demandé par l'utilisateur
+            self.statut_change.emit("Arrêté.")
         except Exception as exc:  # erreur BLE inattendue
             self.statut_change.emit(f"Erreur : {exc}")
         finally:
@@ -60,6 +63,7 @@ class BleWorker(QtCore.QThread):
 
     async def _session_ble(self):
         self._loop = asyncio.get_running_loop()
+        self._tache = asyncio.current_task()
         self._stop_event = asyncio.Event()
 
         # 1) Recherche de la carte
@@ -98,8 +102,14 @@ class BleWorker(QtCore.QThread):
 
     # --- Appelé depuis le thread Qt ------------------------------------------
     def arreter(self):
-        if self._loop is not None and self._stop_event is not None:
-            self._loop.call_soon_threadsafe(self._stop_event.set)
+        """Interrompt la session BLE, y compris un scan ou une connexion en cours."""
+        if self._loop is not None and self._tache is not None:
+            try:
+                # Annuler la tâche interrompt aussi find_device_by_name(),
+                # qu'un simple évènement d'arrêt ne débloquerait pas
+                self._loop.call_soon_threadsafe(self._tache.cancel)
+            except RuntimeError:
+                pass  # la boucle asyncio est déjà terminée
 
 
 # =============================================================================
@@ -246,7 +256,10 @@ class FenetrePrincipale(QtWidgets.QMainWindow):
     def closeEvent(self, event):
         if self._worker is not None:
             self._worker.arreter()
-            self._worker.wait(3000)
+            if not self._worker.wait(5000):
+                # Dernier recours : ne jamais détruire un QThread encore actif
+                self._worker.terminate()
+                self._worker.wait(1000)
         event.accept()
 
 

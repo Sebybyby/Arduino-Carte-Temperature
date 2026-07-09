@@ -112,6 +112,11 @@ void changerEtat(Etat nouvelEtat) {
   switch (etat) {
     case VEILLE:
       BLEDevice::stopAdvertising();
+      if (clientConnecte) {
+        // Déconnecter proprement le client encore connecté (ex. sortie par
+        // appui bouton), sinon l'IHM resterait connectée sans recevoir de données
+        pServeur->disconnect(pServeur->getConnId());
+      }
       digitalWrite(PIN_LED, HIGH);
       Serial.println("[VEILLE] Appuyez sur le bouton pour activer le Bluetooth.");
       break;
