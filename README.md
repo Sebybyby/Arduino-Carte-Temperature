@@ -86,6 +86,30 @@ Fonctionnalités :
 - bouton **Effacer** pour remettre l'acquisition à zéro,
 - bouton **Exporter CSV** pour sauvegarder les mesures.
 
+## Dépannage
+
+**« A fatal error occurred: This chip is ESP32-C3, not ESP32 » au téléversement**
+Mauvaise carte sélectionnée dans l'IDE : choisir **ESP32C3 Dev Module** (et non
+« ESP32 Dev Module »), avec **USB CDC On Boot : Enabled**.
+
+**La carte est visible en BLE mais aucune connexion n'aboutit** (bloqué sur
+« Connecting » depuis le PC comme depuis un téléphone, alors que la publicité
+est reçue avec un bon signal)
+Cause vécue sur ce projet : données résiduelles corrompues en flash
+(calibration RF / NVS) laissées par d'anciens programmes. Correctif :
+**Outils → Erase All Flash Before Sketch Upload → Enabled**, re-téléverser,
+puis remettre l'option sur Disabled.
+
+**L'IHM affiche ~529 °C constant**
+Entrée analogique en circuit ouvert : la PT1000 est absente ou débranchée
+(GPIO 3 tiré à 3,3 V, ADC saturé). Vérifier le pont diviseur ; pour tester
+sans sonde, placer une résistance de 1 kΩ entre GPIO 3 et GND → l'IHM doit
+afficher ≈ 0 °C.
+
+**Échec du téléversement (« Failed to connect »)**
+Forcer le mode bootloader : maintenir **BOOT** (GPIO 9), appuyer brièvement
+sur **RST**, relâcher BOOT, relancer le téléversement.
+
 ### Paramètres BLE (communs firmware / IHM)
 
 | Paramètre | Valeur |
