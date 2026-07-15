@@ -33,7 +33,7 @@ constexpr int PIN_BOUTON  = 5;   // Bouton poussoir (appuyé = LOW, pull-up inte
 constexpr int PIN_LED     = 10;  // LED d'état
 constexpr int PIN_CAPTEUR = 3;   // Entrée analogique de la sonde PT1000
 
-constexpr unsigned long DUREE_PUBLICITE_MS   = 30000; // Visibilité BLE : 30 s
+constexpr unsigned long DUREE_PUBLICITE_MS   = 120000; // Visibilité BLE : 2 min
 constexpr unsigned long PERIODE_MESURE_MS    = 1000;  // Une mesure par seconde
 constexpr unsigned long CLIGNOTEMENT_LENT_MS = 800;   // Période LED en publicité
 constexpr unsigned long CLIGNOTEMENT_RAPIDE_MS = 150; // Période LED connecté
@@ -163,6 +163,8 @@ void setup() {
   pPub->setMinInterval(80);   // 50 ms
   pPub->setMaxInterval(160);  // 100 ms
 
+  Serial.printf("Adresse BLE de la carte : %s\n",
+                BLEDevice::getAddress().toString().c_str());
   changerEtat(VEILLE);
 }
 
@@ -173,7 +175,11 @@ void loop() {
   switch (etat) {
 
     case VEILLE:
-      if (boutonAppuye()) {
+      // Rattrape une connexion qui aboutit juste après le retour en veille
+      // (négociation commencée en fin de fenêtre de publicité)
+      if (clientConnecte) {
+        changerEtat(CONNECTE);
+      } else if (boutonAppuye()) {
         changerEtat(PUBLICITE);
       }
       break;

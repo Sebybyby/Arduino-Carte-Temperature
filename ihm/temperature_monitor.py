@@ -32,6 +32,7 @@ NOM_CARTE = "ESP32-TEMP"
 SERVICE_UUID = "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
 CHARACTERISTIC_UUID = "beb5483e-36e1-4688-b7f5-ea07361b26a8"
 DUREE_SCAN_S = 15.0
+DELAI_CONNEXION_S = 20.0
 
 
 # =============================================================================
@@ -83,14 +84,27 @@ class BleWorker(QtCore.QThread):
         def _sur_deconnexion(_client):
             self._loop.call_soon_threadsafe(self._stop_event.set)
 
-        async with BleakClient(appareil,
-                               disconnected_callback=_sur_deconnexion) as client:
+        try:
+            client = BleakClient(appareil,
+                                 disconnected_callback=_sur_deconnexion,
+                                 timeout=DELAI_CONNEXION_S)
+            await client.connect()
+        except (asyncio.TimeoutError, TimeoutError):
+            self.statut_change.emit(
+                "Échec de la connexion (délai dépassé). Vérifiez que la LED "
+                "de la carte clignote encore, rappuyez sur le bouton si "
+                "besoin, puis réessayez.")
+            return
+
+        try:
             await client.start_notify(CHARACTERISTIC_UUID, self._sur_notification)
             self.connexion_changee.emit(True)
             self.statut_change.emit(f"Connecté à {NOM_CARTE} — acquisition en cours")
 
             # 3) Attente : arrêt demandé par l'utilisateur ou déconnexion carte
             await self._stop_event.wait()
+        finally:
+            await client.disconnect()
 
         self.statut_change.emit("Déconnecté.")
 
