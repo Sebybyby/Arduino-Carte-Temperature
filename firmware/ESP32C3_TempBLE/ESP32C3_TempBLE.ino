@@ -21,6 +21,7 @@
 #include <BLEServer.h>
 #include <BLEUtils.h>
 #include <BLE2902.h>
+#include "esp_phy_init.h"
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -123,7 +124,8 @@ void changerEtat(Etat nouvelEtat) {
     case PUBLICITE:
       debutPublicite = millis();
       BLEDevice::startAdvertising();
-      Serial.println("[PUBLICITE] Bluetooth actif, en attente d'une connexion (30 s)...");
+      Serial.printf("[PUBLICITE] Bluetooth actif, en attente d'une connexion (%lu s)...\n",
+                    DUREE_PUBLICITE_MS / 1000);
       break;
     case CONNECTE:
       Serial.println("[CONNECTE] Client connecté, envoi de la température...");
@@ -140,6 +142,12 @@ void setup() {
   pinMode(PIN_BOUTON, INPUT_PULLUP);
   pinMode(PIN_LED, OUTPUT);
   analogReadResolution(12);
+
+  // Force une calibration RF complète à chaque démarrage. Des données de
+  // calibration corrompues en flash rendent la connexion BLE impossible sur
+  // cette carte (publicité visible mais liaison qui tombe aussitôt,
+  // erreur « BT_HCI: CC evt: op=0x2022, status=0x2 »).
+  esp_phy_erase_cal_data_in_nvs();
 
   // Initialisation du serveur BLE
   BLEDevice::init(NOM_BLE);
