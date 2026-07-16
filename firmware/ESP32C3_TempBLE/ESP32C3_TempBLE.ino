@@ -21,6 +21,7 @@
 #include <BLEServer.h>
 #include <BLEUtils.h>
 #include <BLE2902.h>
+#include "esp_phy_init.h"
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -33,7 +34,7 @@ constexpr int PIN_BOUTON  = 5;   // Bouton poussoir (appuyé = LOW, pull-up inte
 constexpr int PIN_LED     = 10;  // LED d'état
 constexpr int PIN_CAPTEUR = 3;   // Entrée analogique de la sonde PT1000
 
-constexpr unsigned long DUREE_PUBLICITE_MS   = 30000; // Visibilité BLE : 30 s
+constexpr unsigned long DUREE_PUBLICITE_MS   = 120000; // Visibilité BLE : 2 min
 constexpr unsigned long PERIODE_MESURE_MS    = 1000;  // Une mesure par seconde
 constexpr unsigned long CLIGNOTEMENT_LENT_MS = 800;   // Période LED en publicité
 constexpr unsigned long CLIGNOTEMENT_RAPIDE_MS = 150; // Période LED connecté
@@ -42,6 +43,20 @@ constexpr unsigned long ANTI_REBOND_MS       = 250;   // Anti-rebond du bouton
 // Pont diviseur de la sonde : R = V * 500 / (3.3 - V), T = (R - 1000) / 3.9
 constexpr float R_SERIE_OHMS   = 500.0f;
 constexpr float TENSION_ALIM_V = 3.3f;
+
+// Étalonnage de la chaîne de mesure : R_corrigée = R_mesurée × GAIN + OFFSET
+// Procédure : brancher une résistance connue (mesurée au multimètre), lire
+// la « Resistance » affichée au moniteur série, puis GAIN = R_vraie / R_affichée.
+constexpr float ETALONNAGE_GAIN   = 1.0f;
+constexpr float ETALONNAGE_OFFSET = 0.0f;  // en ohms
+constexpr int   NB_LECTURES_ADC   = 16;    // moyennage anti-bruit
+
+// Puissance d'émission BLE. Ce PCB ne tient pas la connexion à +3 dBm
+// (l'appel de courant de l'ampli RF fait décrocher la liaison : publicité
+// visible mais connexions qui tombent en BLE_HCI_CONN_FAILED_TO_BE_ESTABLISHED).
+// À -12 dBm la connexion est fiable, au prix d'une portée de quelques mètres.
+// À réévaluer après révision matérielle (découplage 3,3 V / régulateur).
+constexpr esp_power_level_t PUISSANCE_TX = ESP_PWR_LVL_N12;
 
 // ---------------------------------------------------------------------------
 // États
@@ -92,11 +107,19 @@ void clignoterLed(unsigned long periodeMs) {
 
 // Lit la sonde et convertit la tension en température (°C)
 float lireTemperature() {
-  float tension = analogReadMilliVolts(PIN_CAPTEUR) / 1000.0f;
+  // Moyenne de plusieurs lectures pour réduire le bruit de l'ADC
+  uint32_t somme_mV = 0;
+  for (int i = 0; i < NB_LECTURES_ADC; i++) {
+    somme_mV += analogReadMilliVolts(PIN_CAPTEUR);
+  }
+  float tension = (somme_mV / (float)NB_LECTURES_ADC) / 1000.0f;
+
   float resistance = tension * R_SERIE_OHMS / (TENSION_ALIM_V - tension);
+  resistance = resistance * ETALONNAGE_GAIN + ETALONNAGE_OFFSET;
   float temperature = (resistance - 1000.0f) / 3.9f;
 
-  Serial.printf("Tension : %.3f V | Température : %.2f °C\n", tension, temperature);
+  Serial.printf("Tension : %.3f V | Resistance : %.1f ohms | Temperature : %.2f C\n",
+                tension, resistance, temperature);
   return temperature;
 }
 
@@ -123,7 +146,8 @@ void changerEtat(Etat nouvelEtat) {
     case PUBLICITE:
       debutPublicite = millis();
       BLEDevice::startAdvertising();
-      Serial.println("[PUBLICITE] Bluetooth actif, en attente d'une connexion (30 s)...");
+      Serial.printf("[PUBLICITE] Bluetooth actif, en attente d'une connexion (%lu s)...\n",
+                    DUREE_PUBLICITE_MS / 1000);
       break;
     case CONNECTE:
       Serial.println("[CONNECTE] Client connecté, envoi de la température...");
@@ -141,10 +165,16 @@ void setup() {
   pinMode(PIN_LED, OUTPUT);
   analogReadResolution(12);
 
+  // Force une calibration RF complète à chaque démarrage. Des données de
+  // calibration corrompues en flash rendent la connexion BLE impossible sur
+  // cette carte (publicité visible mais liaison qui tombe aussitôt,
+  // erreur « BT_HCI: CC evt: op=0x2022, status=0x2 »).
+  esp_phy_erase_cal_data_in_nvs();
+
   // Initialisation du serveur BLE
   BLEDevice::init(NOM_BLE);
-  esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_ADV, ESP_PWR_LVL_P3);      // Puissance max
-  esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_CONN_HDL0, ESP_PWR_LVL_P3);
+  esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_DEFAULT, PUISSANCE_TX);
+  esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_ADV, PUISSANCE_TX);
 
   pServeur = BLEDevice::createServer();
   pServeur->setCallbacks(new CallbacksServeur());
@@ -163,6 +193,8 @@ void setup() {
   pPub->setMinInterval(80);   // 50 ms
   pPub->setMaxInterval(160);  // 100 ms
 
+  Serial.printf("Adresse BLE de la carte : %s\n",
+                BLEDevice::getAddress().toString().c_str());
   changerEtat(VEILLE);
 }
 
@@ -173,7 +205,11 @@ void loop() {
   switch (etat) {
 
     case VEILLE:
-      if (boutonAppuye()) {
+      // Rattrape une connexion qui aboutit juste après le retour en veille
+      // (négociation commencée en fin de fenêtre de publicité)
+      if (clientConnecte) {
+        changerEtat(CONNECTE);
+      } else if (boutonAppuye()) {
         changerEtat(PUBLICITE);
       }
       break;
