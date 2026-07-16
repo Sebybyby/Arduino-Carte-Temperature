@@ -44,6 +44,13 @@ constexpr unsigned long ANTI_REBOND_MS       = 250;   // Anti-rebond du bouton
 constexpr float R_SERIE_OHMS   = 500.0f;
 constexpr float TENSION_ALIM_V = 3.3f;
 
+// Étalonnage de la chaîne de mesure : R_corrigée = R_mesurée × GAIN + OFFSET
+// Procédure : brancher une résistance connue (mesurée au multimètre), lire
+// la « Resistance » affichée au moniteur série, puis GAIN = R_vraie / R_affichée.
+constexpr float ETALONNAGE_GAIN   = 1.0f;
+constexpr float ETALONNAGE_OFFSET = 0.0f;  // en ohms
+constexpr int   NB_LECTURES_ADC   = 16;    // moyennage anti-bruit
+
 // Puissance d'émission BLE. Ce PCB ne tient pas la connexion à +3 dBm
 // (l'appel de courant de l'ampli RF fait décrocher la liaison : publicité
 // visible mais connexions qui tombent en BLE_HCI_CONN_FAILED_TO_BE_ESTABLISHED).
@@ -100,11 +107,19 @@ void clignoterLed(unsigned long periodeMs) {
 
 // Lit la sonde et convertit la tension en température (°C)
 float lireTemperature() {
-  float tension = analogReadMilliVolts(PIN_CAPTEUR) / 1000.0f;
+  // Moyenne de plusieurs lectures pour réduire le bruit de l'ADC
+  uint32_t somme_mV = 0;
+  for (int i = 0; i < NB_LECTURES_ADC; i++) {
+    somme_mV += analogReadMilliVolts(PIN_CAPTEUR);
+  }
+  float tension = (somme_mV / (float)NB_LECTURES_ADC) / 1000.0f;
+
   float resistance = tension * R_SERIE_OHMS / (TENSION_ALIM_V - tension);
+  resistance = resistance * ETALONNAGE_GAIN + ETALONNAGE_OFFSET;
   float temperature = (resistance - 1000.0f) / 3.9f;
 
-  Serial.printf("Tension : %.3f V | Température : %.2f °C\n", tension, temperature);
+  Serial.printf("Tension : %.3f V | Resistance : %.1f ohms | Temperature : %.2f C\n",
+                tension, resistance, temperature);
   return temperature;
 }
 
