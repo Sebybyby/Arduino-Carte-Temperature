@@ -44,6 +44,13 @@ constexpr unsigned long ANTI_REBOND_MS       = 250;   // Anti-rebond du bouton
 constexpr float R_SERIE_OHMS   = 500.0f;
 constexpr float TENSION_ALIM_V = 3.3f;
 
+// Puissance d'émission BLE. Ce PCB ne tient pas la connexion à +3 dBm
+// (l'appel de courant de l'ampli RF fait décrocher la liaison : publicité
+// visible mais connexions qui tombent en BLE_HCI_CONN_FAILED_TO_BE_ESTABLISHED).
+// À -12 dBm la connexion est fiable, au prix d'une portée de quelques mètres.
+// À réévaluer après révision matérielle (découplage 3,3 V / régulateur).
+constexpr esp_power_level_t PUISSANCE_TX = ESP_PWR_LVL_N12;
+
 // ---------------------------------------------------------------------------
 // États
 // ---------------------------------------------------------------------------
@@ -151,8 +158,8 @@ void setup() {
 
   // Initialisation du serveur BLE
   BLEDevice::init(NOM_BLE);
-  esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_ADV, ESP_PWR_LVL_P3);      // Puissance max
-  esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_CONN_HDL0, ESP_PWR_LVL_P3);
+  esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_DEFAULT, PUISSANCE_TX);
+  esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_ADV, PUISSANCE_TX);
 
   pServeur = BLEDevice::createServer();
   pServeur->setCallbacks(new CallbacksServeur());
