@@ -106,6 +106,18 @@ void clignoterLed(unsigned long periodeMs) {
   }
 }
 
+// Conversion résistance -> température selon IEC 60751 (Callendar-Van Dusen)
+// pour élément platine 1000 ohms à 0 °C, 3850 ppm/K (famille TE NB-PTCO).
+// R = R0·(1 + A·t + B·t²), inversé en t. Valide de -50 à +250 °C.
+constexpr float PT_R0 = 1000.0f;
+constexpr float PT_A  = 3.9083e-3f;
+constexpr float PT_B  = -5.775e-7f;
+
+float resistanceVersTemperature(float r) {
+  float discriminant = PT_A * PT_A - 4.0f * PT_B * (1.0f - r / PT_R0);
+  return (-PT_A + sqrtf(discriminant)) / (2.0f * PT_B);
+}
+
 // Lit la sonde et convertit la tension en température (°C)
 // Moyenne tronquée : 16 lectures, on écarte les 4 plus basses et les 4 plus
 // hautes (rejette les valeurs polluées par les rafales d'émission BLE),
@@ -135,7 +147,7 @@ float lireTemperature() {
 
   float resistance = tension * R_SERIE_OHMS / (TENSION_ALIM_V - tension);
   resistance = resistance * ETALONNAGE_GAIN + ETALONNAGE_OFFSET;
-  float temperature = (resistance - 1000.0f) / 3.9f;
+  float temperature = resistanceVersTemperature(resistance);
 
   Serial.printf("Tension : %.3f V | Resistance : %.1f ohms | Temperature : %.2f C\n",
                 tension, resistance, temperature);

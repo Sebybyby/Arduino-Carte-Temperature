@@ -134,6 +134,18 @@ float lireCanalTronque(int pin, int n, unsigned long pasMs) {
   return somme / (float)(fin - debut);
 }
 
+// Conversion résistance -> température selon IEC 60751 (Callendar-Van Dusen)
+// pour élément platine 1000 ohms à 0 °C, 3850 ppm/K (famille TE NB-PTCO).
+// R = R0·(1 + A·t + B·t²), inversé en t. Valide de -50 à +250 °C.
+constexpr float PT_R0 = 1000.0f;
+constexpr float PT_A  = 3.9083e-3f;
+constexpr float PT_B  = -5.775e-7f;
+
+float resistanceVersTemperature(float r) {
+  float discriminant = PT_A * PT_A - 4.0f * PT_B * (1.0f - r / PT_R0);
+  return (-PT_A + sqrtf(discriminant)) / (2.0f * PT_B);
+}
+
 // Lit la sonde et convertit en température (°C), en mesurant AUSSI le rail :
 // ses variations s'annulent dans le rapport tension capteur / tension rail.
 float lireTemperature() {
@@ -144,7 +156,7 @@ float lireTemperature() {
 
   float resistance = tension * R_SERIE_OHMS / (tensionRail - tension);
   resistance = resistance * ETALONNAGE_GAIN + ETALONNAGE_OFFSET;
-  float temperature = (resistance - 1000.0f) / 3.9f;
+  float temperature = resistanceVersTemperature(resistance);
 
   Serial.printf("V: %.3f V | Vrail: %.3f V | R: %.1f ohms | T: %.2f C\n",
                 tension, tensionRail, resistance, temperature);
