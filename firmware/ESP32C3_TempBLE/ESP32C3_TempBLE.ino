@@ -110,10 +110,13 @@ void clignoterLed(unsigned long periodeMs) {
 // hautes (rejette les valeurs polluées par les rafales d'émission BLE),
 // puis on moyenne les 8 restantes.
 float lireTemperature() {
+  // Lectures étalées sur ~200 ms : une rafale d'émission BLE (~10 ms) ne
+  // pollue ainsi qu'une minorité d'échantillons, que la moyenne tronquée
+  // rejette. Des lectures trop rapprochées tomberaient toutes dedans.
   uint32_t lectures[NB_LECTURES_ADC];
   for (int i = 0; i < NB_LECTURES_ADC; i++) {
     lectures[i] = analogReadMilliVolts(PIN_CAPTEUR);
-    delayMicroseconds(200);
+    delay(12);
   }
 
   // Tri par insertion (16 valeurs : simple et suffisant)
