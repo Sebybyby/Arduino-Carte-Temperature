@@ -47,7 +47,7 @@ constexpr float TENSION_ALIM_V = 3.3f;
 // Étalonnage de la chaîne de mesure : R_corrigée = R_mesurée × GAIN + OFFSET
 // Procédure : brancher une résistance connue (mesurée au multimètre), lire
 // la « Resistance » affichée au moniteur série, puis GAIN = R_vraie / R_affichée.
-constexpr float ETALONNAGE_GAIN   = 1.0f;
+constexpr float ETALONNAGE_GAIN   = 1.196f;  // Étalonné : PT1000 1100 ohms (multimètre) / ~920 ohms (lecture brute)
 constexpr float ETALONNAGE_OFFSET = 0.0f;  // en ohms
 constexpr int   NB_LECTURES_ADC   = 16;    // moyennage anti-bruit
 
@@ -106,13 +106,28 @@ void clignoterLed(unsigned long periodeMs) {
 }
 
 // Lit la sonde et convertit la tension en température (°C)
+// Moyenne tronquée : 16 lectures, on écarte les 4 plus basses et les 4 plus
+// hautes (rejette les valeurs polluées par les rafales d'émission BLE),
+// puis on moyenne les 8 restantes.
 float lireTemperature() {
-  // Moyenne de plusieurs lectures pour réduire le bruit de l'ADC
-  uint32_t somme_mV = 0;
+  uint32_t lectures[NB_LECTURES_ADC];
   for (int i = 0; i < NB_LECTURES_ADC; i++) {
-    somme_mV += analogReadMilliVolts(PIN_CAPTEUR);
+    lectures[i] = analogReadMilliVolts(PIN_CAPTEUR);
+    delayMicroseconds(200);
   }
-  float tension = (somme_mV / (float)NB_LECTURES_ADC) / 1000.0f;
+
+  // Tri par insertion (16 valeurs : simple et suffisant)
+  for (int i = 1; i < NB_LECTURES_ADC; i++) {
+    uint32_t v = lectures[i];
+    int j = i - 1;
+    while (j >= 0 && lectures[j] > v) { lectures[j + 1] = lectures[j]; j--; }
+    lectures[j + 1] = v;
+  }
+
+  // Moyenne des 8 valeurs centrales
+  uint32_t somme_mV = 0;
+  for (int i = 4; i < NB_LECTURES_ADC - 4; i++) somme_mV += lectures[i];
+  float tension = (somme_mV / 8.0f) / 1000.0f;
 
   float resistance = tension * R_SERIE_OHMS / (TENSION_ALIM_V - tension);
   resistance = resistance * ETALONNAGE_GAIN + ETALONNAGE_OFFSET;
