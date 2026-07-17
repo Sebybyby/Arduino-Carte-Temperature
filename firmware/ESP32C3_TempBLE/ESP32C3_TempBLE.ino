@@ -43,8 +43,9 @@ constexpr unsigned long ANTI_REBOND_MS       = 250;   // Anti-rebond du bouton
 // Pont diviseur de la sonde : 3,3 V -> R série 499 ohms -> GPIO 3 -> PT1000 -> GND
 // R = V * R_SERIE / (V_alim - V), puis T = (R - 1000) / 3.9
 constexpr float R_SERIE_OHMS   = 499.0f;  // Valeur réelle sur le PCB (E96)
-constexpr float TENSION_ALIM_V = 3.05f;   // Tension RÉELLE mesurée du rail (pas 3,3 V !)
-                                          // Ajuster si la mesure oscillo diffère.
+constexpr float TENSION_ALIM_V = 3.129f;  // Tension réelle du rail, calée sur référence.
+                                          // Réglage : T affichée trop HAUTE -> augmenter,
+                                          // trop BASSE -> diminuer. 10 mV = ~3 °C.
 
 // Étalonnage fin résiduel : R_corrigée = R_mesurée × GAIN + OFFSET
 // À caler en dernier avec un thermomètre de référence (1 °C = 3,9 ohms d'offset).
