@@ -40,16 +40,17 @@ constexpr unsigned long CLIGNOTEMENT_LENT_MS = 800;   // Période LED en publici
 constexpr unsigned long CLIGNOTEMENT_RAPIDE_MS = 150; // Période LED connecté
 constexpr unsigned long ANTI_REBOND_MS       = 250;   // Anti-rebond du bouton
 
-// Pont diviseur de la sonde : R = V * 500 / (3.3 - V), T = (R - 1000) / 3.9
-constexpr float R_SERIE_OHMS   = 500.0f;
-constexpr float TENSION_ALIM_V = 3.3f;
+// Pont diviseur de la sonde : 3,3 V -> R série 499 ohms -> GPIO 3 -> PT1000 -> GND
+// R = V * R_SERIE / (V_alim - V), puis T = (R - 1000) / 3.9
+constexpr float R_SERIE_OHMS   = 499.0f;  // Valeur réelle sur le PCB (E96)
+constexpr float TENSION_ALIM_V = 3.05f;   // Tension RÉELLE mesurée du rail (pas 3,3 V !)
+                                          // Ajuster si la mesure oscillo diffère.
 
-// Étalonnage de la chaîne de mesure : R_corrigée = R_mesurée × GAIN + OFFSET
-// Procédure : brancher une résistance connue (mesurée au multimètre), lire
-// la « Resistance » affichée au moniteur série, puis GAIN = R_vraie / R_affichée.
-constexpr float ETALONNAGE_GAIN   = 1.196f;  // Étalonné : PT1000 1100 ohms (multimètre) / ~920 ohms (lecture brute)
+// Étalonnage fin résiduel : R_corrigée = R_mesurée × GAIN + OFFSET
+// À caler en dernier avec un thermomètre de référence (1 °C = 3,9 ohms d'offset).
+constexpr float ETALONNAGE_GAIN   = 1.0f;
 constexpr float ETALONNAGE_OFFSET = 0.0f;  // en ohms
-constexpr int   NB_LECTURES_ADC   = 16;    // moyennage anti-bruit
+constexpr int   NB_LECTURES_ADC   = 16;    // moyennage anti-bruit (moyenne tronquée)
 
 // Puissance d'émission BLE. Ce PCB ne tient pas la connexion à +3 dBm
 // (l'appel de courant de l'ampli RF fait décrocher la liaison : publicité
